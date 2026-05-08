@@ -22,6 +22,7 @@
 | **インストラクション** (`.instructions.md`) | `rules/**/*.md` | ✅ `applyTo` を追加するだけ |
 | **プロンプトファイル** (`.prompt.md`) | `commands/*.md` | ✅ description フロントマターのみ |
 | **リポジトリ指示** (`copilot-instructions.md`) | `SOUL.md`, `RULES.md`, `AGENTS.md`, `CLAUDE.md` | ✅ そのまま転記可（哲学・規約の最高品質素材） |
+| **Hooks** (`.github/hooks/hooks.json`) | `hooks/hooks.json` + `scripts/hooks/*.js` | ⚠️ ロジック移植（Node.js → bash/PowerShell） |
 | **MCP サーバー** | `mcp-configs/mcp-servers.json` | ✅ そのまま流用可 |
 
 ### 互換性の分類（改訂）
@@ -367,24 +368,74 @@ mcp-servers:
 
 ---
 
-## 6. ❌ Copilot で使用不可なもの
+## 6. ⚠️ Copilot Hooks へロジック移植可能なもの
+
+> **改訂**: 当初「使用不可」と分類していた hooks は、GitHub Copilot Hooks（[公式ドキュメント](https://docs.github.com/ja/copilot/how-tos/copilot-on-github/customize-copilot/customize-cloud-agent/use-hooks)）にロジック移植することで利用可能であることが判明しました。
+
+### Copilot Hooks のトリガーと ECC との対応
+
+| Copilot トリガー | ECC イベント | 対応度 |
+|----------------|-------------|--------|
+| `sessionStart` | `SessionStart` | ✅ 完全対応 |
+| `sessionEnd` | `Stop` | ✅ 完全対応 |
+| `userPromptSubmitted` | `UserPromptSubmit` | ✅ 完全対応 |
+| `preToolUse` | `PreToolUse` | ✅ 完全対応 |
+| `postToolUse` | `PostToolUse` | ✅ 完全対応 |
+| `errorOccurred` | （なし） | ❌ Copilot 独自 |
+| （なし） | `PreCompact` | ❌ ECC 独自 |
+
+### フォーマットの違い
+
+| 項目 | Copilot | ECC |
+|------|---------|-----|
+| ファイル | `.github/hooks/*.json` | `hooks/hooks.json` |
+| ハンドラ | `bash` / `powershell` キー | `command` キー（Node.js script） |
+| ランタイム | bash / PowerShell スクリプト | Node.js (`scripts/hooks/*.js`) |
+
+JSON 構造とハンドラ言語が異なるため、ECC の `hooks.json` をそのままコピーしても動作しません。**ロジックを bash / PowerShell に書き直す**形で移植する必要があります。
+
+### 移植済みのフック（このバンドルに収録）
+
+`GithubCopilot/.github/hooks/` に以下を収録:
+
+| ECC オリジナル | Copilot 移植版 | トリガー | 動作 |
+|--------------|---------------|---------|------|
+| `session-start.js` | `session-start.{sh,ps1}` | sessionStart | セッション開始ログ |
+| `session-end.js` | `session-end.{sh,ps1}` | sessionEnd | 終了ログ + 未コミット警告 |
+| `config-protection.js` | `config-protection.{sh,ps1}` | preToolUse | linter/formatter 設定改変ブロック |
+| `pre-write-doc-warn.js` | `doc-file-warning.{sh,ps1}` | preToolUse | ad-hoc ドキュメント警告 |
+| （pre-bash-dispatcher の一部） | `secrets-scan.{sh,ps1}` | preToolUse | ハードコードシークレット検出 |
+| `block-no-verify.js` | `no-verify-block.{sh,ps1}` | preToolUse | `git --no-verify` ブロック |
+| `post-edit-format.js` | `post-edit-format.{sh,ps1}` | postToolUse | 編集後の自動フォーマット |
+| （新規） | `error-log.{sh,ps1}` | errorOccurred | エラー詳細ログ |
+
+### 移植不可（ECC ランタイム依存）
+
+| ECC フック | 理由 |
+|-----------|------|
+| `governance-capture.js` | ECC バックエンドへのイベント送信が必要 |
+| `observe-runner.js` | ECC 学習システムに観察データを送る |
+| `gateguard-fact-force.js` | ECC 状態管理（first-touch 検出）に依存 |
+| `suggest-compact.js` | Copilot に compact 概念なし |
+| `mcp-health-check.js` | Copilot MCP API が異なる |
+| `pre-compact.js` | Copilot に compact 概念なし |
+
+---
+
+## 7. ❌ Copilot で完全に使用不可なもの
 
 | カテゴリ | 内容 | 理由 |
 |---------|------|------|
-| `hooks/hooks.json` | Claude Code hooks（PreToolUse, PostToolUse, PreCompact 等） | Claude Code 専用トリガー |
-| `scripts/hooks/` | Hook 実行スクリプト群 | Claude Code ランタイム依存 |
-| `rules/*/hooks.md` | 言語別 hooks 定義 | Claude Code 専用 |
+| `rules/*/hooks.md` | 言語別 hooks ガイド（ドキュメント） | Claude Code 用の説明 |
 | `ecc2/` | ECC v2 Rust 実装 | Claude Code CLI ツール |
 | `install.sh` / `install.ps1` | ECC インストーラー | `~/.claude/` 設定用 |
 | `agent.yaml` | gitagent エクスポート定義 | Claude Code プラグインマニフェスト |
 | `.codex/`, `.cursor/`, `.gemini/`, `.kiro/`, `.opencode/`, `.trae/` | 他 AI ツール固有設定 | 各ツール専用形式 |
 | `src/llm/` | LLM ユーティリティ | Claude Code 内部ツール |
 
-> ECC は複数の hooks ランタイム（pre-bash, doc-warning, suggest-compact, governance-capture 等）を持ちますが、これは Claude Code のツール実行イベントにフックするもので、Copilot には同等機構がありません。
-
 ---
 
-## 7. 推奨セットアップ手順
+## 8. 推奨セットアップ手順
 
 ### ステップ 1: Skills のネイティブ移植（最も簡単で効果大）
 
@@ -443,29 +494,30 @@ VS Code `settings.json` に追加、または特定のエージェントの `mcp
 
 ---
 
-## 8. 数量サマリー（改訂版）
+## 9. 数量サマリー（改訂版）
 
-| カテゴリ | 総数 | ✅ ネイティブ互換 | 🟢 軽微な変換で使用可 | ❌ 使用不可 |
-|---------|------|------------------|--------------------|------------|
-| Skills (`skills/` + `.agents/skills/` + `.claude/skills/`) | 215 | 33（既にネイティブパス） | 182（コピーのみ） | — |
-| Agents | 48 | — | 48（フロントマター変換） | — |
-| Rules（言語別、hooks 除く） | 52 | — | 52（applyTo 追加） | — |
-| Rules（共通、hooks 除く） | 8〜10 | — | 8〜10（applyTo 追加） | — |
-| Rules（hooks.md） | 13 | — | — | 13 |
-| Commands | 68 | — | 68（description 調整） | — |
-| Contexts | 3 | — | 3 | — |
-| ルートレベル MD（哲学・規約） | 4（SOUL/RULES/AGENTS/CLAUDE） | — | 4（copilot-instructions.md に転記） | — |
-| ルートレベル MD（ガイド・記事） | 7+（the-*-guide, COMMANDS-QUICK-REF, TROUBLESHOOTING 等） | 7+（参照ドキュメント） | — | — |
-| ルートレベル MD（時点記録） | 3（WORKING-CONTEXT/REPO-ASSESSMENT/EVALUATION） | — | — | 3（流用価値低） |
-| MCP 設定 | 17 サーバー | 17 | — | — |
-| Hooks ランタイム | 8+ | — | — | 8+ |
-| Scripts/Installer | 30+ | — | — | 30+ |
+| カテゴリ | 総数 | ✅ ネイティブ互換 | 🟢 軽微な変換で使用可 | ⚠️ ロジック移植 | ❌ 使用不可 |
+|---------|------|------------------|--------------------|----------------|------------|
+| Skills (`skills/` + `.agents/skills/` + `.claude/skills/`) | 215 | 33（既にネイティブパス） | 182（コピーのみ） | — | — |
+| Agents | 48 | — | 48（フロントマター変換） | — | — |
+| Rules（言語別、hooks 除く） | 52 | — | 52（applyTo 追加） | — | — |
+| Rules（共通、hooks 除く） | 8〜10 | — | 8〜10（applyTo 追加） | — | — |
+| Rules（hooks.md） | 13 | — | — | — | 13 |
+| Commands | 68 | — | 68（description 調整） | — | — |
+| Contexts | 3 | — | 3 | — | — |
+| ルートレベル MD（哲学・規約） | 4（SOUL/RULES/AGENTS/CLAUDE） | — | 4（copilot-instructions.md に転記） | — | — |
+| ルートレベル MD（ガイド・記事） | 7+ | 7+ | — | — | — |
+| ルートレベル MD（時点記録） | 3 | — | — | — | 3 |
+| MCP 設定 | 17 サーバー | 17 | — | — | — |
+| Hooks（Copilot Hooks 移植可能） | 8 | — | — | 8（bash/PS 移植） | — |
+| Hooks（ECC ランタイム依存） | 6 | — | — | — | 6 |
+| Scripts/Installer | 30+ | — | — | — | 30+ |
 
-**合計**: 約 **480+ ファイル** のうち、**約 380+ ファイル（約 79%）が Copilot で活用可能**
+**合計**: 約 **490+ ファイル** のうち、**約 388+ ファイル（約 79%）が Copilot で活用可能**（うち 8 ファイル分のロジックは bash/PowerShell に書き直して移植）
 
 ---
 
-## 9. 結論（改訂）
+## 10. 結論（改訂）
 
 GitHub Copilot のカスタムエージェント / スキル / インストラクション機能は **ECC の構造とほぼ 1 対 1 で対応** しており、Claude Code 専用と思われていた資産の大半が **そのままもしくはわずかな変換で Copilot に移植可能** です。
 

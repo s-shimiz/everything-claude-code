@@ -54,6 +54,18 @@ GithubCopilot/
     │   ├── refactor-clean.prompt.md
     │   ├── update-docs.prompt.md
     │   └── quality-gate.prompt.md
+    ├── hooks/                     ← Copilot Hooks (sessionStart/preToolUse/postToolUse 等)
+    │   ├── hooks.json
+    │   ├── README.md
+    │   └── scripts/
+    │       ├── session-start.{sh,ps1}
+    │       ├── session-end.{sh,ps1}
+    │       ├── config-protection.{sh,ps1}
+    │       ├── doc-file-warning.{sh,ps1}
+    │       ├── secrets-scan.{sh,ps1}
+    │       ├── no-verify-block.{sh,ps1}
+    │       ├── post-edit-format.{sh,ps1}
+    │       └── error-log.{sh,ps1}
     └── skills/                    ← Copilot カスタムスキル（5 つ収録、残りは setup スクリプトで一括コピー）
         ├── tdd-workflow/
         │   └── SKILL.md
@@ -213,11 +225,28 @@ ECC の以下の内容を統合:
 - `coding-standards` — コーディング規約
 - `git-workflow` — Git ワークフロー
 
-**追加の 177 スキルは `setup.ps1` / `setup.sh` で一括コピー可能**:
+**追加の 177 スキルは `setup.ps1` / `setup.sh` / `setup.js` で一括コピー可能**:
 
 ```powershell
 .\setup.ps1
 ```
+
+### `.github/hooks/`
+
+**Copilot Hooks**。エージェント実行中の重要なポイントで自動チェックを実行（[公式ドキュメント](https://docs.github.com/ja/copilot/how-tos/copilot-on-github/customize-copilot/customize-cloud-agent/use-hooks)）。
+
+| トリガー | フック | 動作 |
+|---------|------|------|
+| `sessionStart` | session-start | セッション開始ログ |
+| `preToolUse` | config-protection | linter/formatter 設定改変ブロック |
+| `preToolUse` | doc-file-warning | ad-hoc ドキュメントファイル警告 |
+| `preToolUse` | secrets-scan | ハードコードシークレット検出 → ブロック |
+| `preToolUse` | no-verify-block | `git --no-verify` ブロック |
+| `postToolUse` | post-edit-format | 編集後の自動フォーマット（prettier/biome/ruff/black/gofmt/rustfmt 等） |
+| `sessionEnd` | session-end | 終了ログ + 未コミット警告 |
+| `errorOccurred` | error-log | エラー詳細ログ |
+
+bash と PowerShell の両方をサポートしているので、Linux/macOS/Windows のいずれでも動作します。詳細は [.github/hooks/README.md](./.github/hooks/README.md) を参照。
 
 ---
 
@@ -284,11 +313,13 @@ tools: ["read", "search", "edit"]
 | `agents/*.md` | → | `.github/agents/*.agent.md` |
 | `commands/*.md` | → | `.github/prompts/*.prompt.md` |
 | `skills/*/SKILL.md` | → | `.github/skills/*/SKILL.md`（無変換、`origin: ECC` 行のみ削除） |
+| `hooks/hooks.json` + `scripts/hooks/*.js` | → | `.github/hooks/hooks.json` + `.github/hooks/scripts/*.{sh,ps1}`（ロジック移植） |
 | `mcp-configs/mcp-servers.json` | → | `mcp/mcp.json`（VS Code `settings.json` に転記） |
 
 **変換不可のもの**:
-- `hooks/hooks.json` — Claude Code 専用イベントトリガー
-- `scripts/hooks/*` — Claude Code ランタイム依存
+- `governance-capture.js`, `observe-runner.js`, `gateguard-fact-force.js` — ECC ランタイム / 状態管理依存
+- `suggest-compact.js` — Copilot に compact 概念なし
+- `mcp-health-check.js` — Copilot MCP API が異なる
 - `ecc2/`, `install.sh`, `install.ps1` — Claude Code インストーラー
 
 ---

@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "_comment": "ECC のフックロジックを GitHub Copilot Hooks フォーマットに移植したもの。 sessionStart/preToolUse/postToolUse/sessionEnd の主要ポイントで実行されます。",
+  "hooks": {
+    "sessionStart": [
+      {
+        "type": "command",
+        "bash": "./.github/hooks/scripts/session-start.sh",
+        "powershell": "./.github/hooks/scripts/session-start.ps1",
+        "cwd": ".",
+        "timeoutSec": 10
+      }
+    ],
+    "preToolUse": [
+      {
+        "type": "command",
+        "bash": "./.github/hooks/scripts/config-protection.sh",
+        "powershell": "./.github/hooks/scripts/config-protection.ps1",
+        "cwd": ".",
+        "timeoutSec": 5
+      },
+      {
+        "type": "command",
+        "bash": "./.github/hooks/scripts/doc-file-warning.sh",
+        "powershell": "./.github/hooks/scripts/doc-file-warning.ps1",
+        "cwd": ".",
+        "timeoutSec": 5
+      },
+      {
+        "type": "command",
+        "bash": "./.github/hooks/scripts/secrets-scan.sh",
+        "powershell": "./.github/hooks/scripts/secrets-scan.ps1",
+        "cwd": ".",
+        "timeoutSec": 10
+      },
+      {
+        "type": "command",
+        "bash": "./.github/hooks/scripts/no-verify-block.sh",
+        "powershell": "./.github/hooks/scripts/no-verify-block.ps1",
+        "cwd": ".",
+        "timeoutSec": 5
+      }
+    ],
+    "postToolUse": [
+      {
+        "type": "command",
+        "bash": "./.github/hooks/scripts/post-edit-format.sh",
+        "powershell": "./.github/hooks/scripts/post-edit-format.ps1",
+        "cwd": ".",
+        "timeoutSec": 30
+      }
+    ],
+    "sessionEnd": [
+      {
+        "type": "command",
+        "bash": "./.github/hooks/scripts/session-end.sh",
+        "powershell": "./.github/hooks/scripts/session-end.ps1",
+        "cwd": ".",
+        "timeoutSec": 10
+      }
+    ],
+    "errorOccurred": [
+      {
+        "type": "command",
+        "bash": "./.github/hooks/scripts/error-log.sh",
+        "powershell": "./.github/hooks/scripts/error-log.ps1",
+        "cwd": ".",
+        "timeoutSec": 5
+      }
+    ]
+  }
+}
